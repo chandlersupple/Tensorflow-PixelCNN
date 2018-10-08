@@ -10,7 +10,7 @@ sess = tf.InteractiveSession()
     # mask
 def mask(mask_type, num_inputs, num_outputs, kernel_size, num_channels):
 
-    ones_mask = np.ones((kernel_size[0], kernel_size[1], num_inputs, num_outputs))
+    ones_mask = np.ones([kernel_size[0], kernel_size[1], num_inputs, num_outputs])
     kernel_ch = kernel_size[0] // 2
     kernel_cw = kernel_size[1] // 2
     
@@ -84,13 +84,15 @@ def G_conv(x, kernel_size, num_channels, G_conv_fm, scope= "G_conv"):
 def G_activation_func(x, mask_type, kernel_size, num_channels, scope= "G_activation_func"):
     with tf.variable_scope(scope):
         
-        d_in_one, d_in_two = tf.split(x, 2, 3)
+        two_p = np.shape(x)[-1]
+        d_conv = conv2d(x, mask_type, two_p, kernel_size, [1, 1, 1, 1], num_channels, scope= 'd_conv')
+        d_in_one, d_in_two = tf.split(d_conv, 2, 3)
         d_tanh = tf.nn.tanh(d_in_one)
         d_sigm = tf.nn.sigmoid(d_in_two)
     
         return d_tanh * d_sigm
 
-    # batch -- Replace the following code in accordance to the format of your dataset
+    # batch
 def batch(batches_in_epoch, batch_size, image_dims, flat= False): # Returns a batch of images from the given dataset
     
         all_batches = []
@@ -111,7 +113,9 @@ def batch(batches_in_epoch, batch_size, image_dims, flat= False): # Returns a ba
 class PixelCNN():
     def __init__(self, image_height, image_width, num_channels, q_levels= 256, G_conv_fm= 16, G_conv_layers= 7, 
                  O_conv_fm= 32, lr= 0.0001, grad_clip= 1):
-                
+        
+        # Training is done in parallel, sampling is sequential
+        
         self.img_h = image_height
         self.img_w = image_width
         self.num_channels = num_channels
@@ -160,7 +164,7 @@ class PixelCNN():
                            feed_dict= {self.x: images, self.y: images})
         return cost
         
-    def predict(self, images): # Neccessary for the 'sample' function
+    def predict(self, images):
         
         pixel_probs = sess.run(self.output, feed_dict= {self.x: images})
         pixel_indices = np.argmax(pixel_probs, 4)
@@ -168,32 +172,32 @@ class PixelCNN():
         
         return pixel_values
         
-    def sample(self, images, occlusion): # Sequentially generates the occluded section of an image
+    def sample(self, images, occlusion):
         
-        images[:, occlusion, :, :] = 0
+        b_occlusion = occlusion
+        images_seq = images
+        images_seq[:, b_occlusion:, :, :] = 0
         
-        for i in range (occlusion, self.img_h):
+        for i in range (b_occlusion, self.img_h):
             for j in range (self.img_w):
                 for k in range (self.num_channels):
-                    images[:, i, j, k] = (self.predict(images))[:, i, j, k]
+                    n_sample = self.predict(images_seq)
+                    images_seq[:, i, j, k] = n_sample[:, i, j, k]
                     
-        return images
+        return images_seq
                     
 batch_size = 100
-batches_in_epoch = 13000 // batch_size # Change in accordance to the number of images in your dataset (ie. 13000)
+batches_in_epoch = 13000 // batch_size
 network = PixelCNN(32, 32, 3)
-batch_xy = batch(batches_in_epoch, batch_size, [32, 32]) # Creates all batches and stores them in a list
+batch_xy = batch(batches_in_epoch, batch_size, [32, 32])
 
-for epoch_iter in range (128): # Training function for the PixelCNN
+for epoch_iter in range (128):
     for batch_iter in range (batches_in_epoch):
         cost = network.train(batch_xy[batch_iter])
         print('Epoch %s, Batch %s / %s, Cost: %s' %(epoch_iter, batch_iter, batches_in_epoch, int(cost * 10e4)))
 
-'''The following will generate the occluded section of an image
-If you'd like to continue training the network after running the following code, 
-set the 'batch_size' to the origional batch size before doing so'''
-
 batch_size = 1
-pred = network.sample(np.reshape(batch_xy[0][0], [batch_size, 32, 32, 3]), 25)
+resh_batch = np.reshape(batch_xy[0][0], [batch_size, 32, 32, 3])
+pred = network.sample(resh_batch)
 resh_pred = np.reshape(pred, [32, 32, 3])
 pred_img = image.array_to_img(resh_pred)
