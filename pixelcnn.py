@@ -194,10 +194,10 @@ batch_xy = batch(batches_in_epoch, batch_size, [32, 32])
 for epoch_iter in range (128):
     for batch_iter in range (batches_in_epoch):
         cost = network.train(batch_xy[batch_iter])
-        print('Epoch %s, Batch %s / %s, Cost: %s' %(epoch_iter, batch_iter, batches_in_epoch, int(cost * 10e4)))
+        print('Epoch %s, Batch %s / %s, Cost: %s' %(epoch_iter, batch_iter, batches_in_epoch, int(cost * 10e4))) 
 
 batch_size = 1
-resh_batch = np.reshape(batch_xy[0][0], [batch_size, 32, 32, 3])
+resh_batch = np.reshape(batch_xy[2][0], [batch_size, 32, 32, 3])
 pred = network.sample(resh_batch)
 resh_pred = np.reshape(pred, [32, 32, 3])
 pred_img = image.array_to_img(resh_pred)
